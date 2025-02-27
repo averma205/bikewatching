@@ -1,13 +1,3 @@
-root {
-    --color-departures: steelblue;
-    --color-arrivals: darkorange;
-    --color: color-mix(
-    in oklch,
-    var(--color-departures) calc(100% * var(--departure-ratio)),
-    var(--color-arrivals)
-    );
-}
-
 body {
     font: 100%/1.5 system-ui, sans-serif;
     display: flex;
@@ -27,6 +17,14 @@ html, body {
     display: flex;
     justify-content: center; /* Center horizontally */
     align-items: center;     /* Center vertically */
+}
+
+h1 {
+    width: 100%;
+    label {
+        text-align: right;
+        height: 50%;
+    }
 }
 
 #map {
@@ -64,25 +62,42 @@ circle {
 h1 {
     display: flex;
     gap: 1em;
+    font-size: 45px;
     label {
         display: block;
-        align-items: baseline;
+        align-items: center;
         margin-left: auto;
+        font-size: 30px;
+        margin-top: 15px;
+        input {
+            width: 505px;
+        }
+        #any-time {
+            color: gray;
+            display: block;
+            font-size: small;
+        }
+        #selected-time {
+            display: block;
+            font-size: small;
+        }
     }
 }
 
 .legend {
     display: flex;
     justify-content: center;
-    gap: 10px;
+    gap: 0px;
     margin-block: 10px;
     width: 100%;
+    --color-departures: steelblue;
+    --color-arrivals: darkorange;
     div {
         flex: 1;
         padding: 5px 10px;
-        border-radius: 5px;
         color: black;
         font-weight: bold;
+        opacity: 0.8;
         background-color: color-mix(
             in oklch,
             var(--color-departures) calc(100% * var(--departure-ratio)),

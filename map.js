@@ -10,44 +10,41 @@ const map = new mapboxgl.Map({
     minZoom: 5, // Minimum allowed zoom
     maxZoom: 18 // Maximum allowed zoom
 });
+let departuresByMinute = Array.from({ length: 1440 }, () => []);
+let arrivalsByMinute = Array.from({ length: 1440 }, () => []);
 let trips = await d3.csv(
     'https://dsc106.com/labs/lab07/data/bluebikes-traffic-2024-03.csv',
     (trip) => {
       trip.started_at = new Date(trip.started_at);
+      let startedMinutes = minutesSinceMidnight(trip.started_at); 
+      departuresByMinute[startedMinutes].push(trip);
       trip.ended_at = new Date(trip.ended_at);
+      let endedMinutes = minutesSinceMidnight(trip.ended_at); 
+      arrivalsByMinute[endedMinutes].push(trip);
       return trip;
     },
 );
 
-let departuresByMinute = Array.from({ length: 1440 }, () => []);
-let arrivalsByMinute = Array.from({ length: 1440 }, () => []);
-
-function computeStationTraffic(stations, trips) {
+function computeStationTraffic(stations, timeFilter = -1) {
+    // Retrieve filtered trips efficiently
     const departures = d3.rollup(
-        trips,
-        (v) => v.length,
-        (d) => d.start_station_id,
+      filterByMinute(departuresByMinute, timeFilter), // Efficient retrieval
+      (v) => v.length,
+      (d) => d.start_station_id
     );
-    const arrivals = d3.rollup(
-        trips,
-        (v) => v.length,
-        (d) => d.end_station_id,
-    );
-    const totalTraffic = new Map([...departures]);
-    arrivals.forEach((value, key) => {
-        if (totalTraffic.has(key)) {
-            totalTraffic.set(key, totalTraffic.get(key) + value);
-        } else {
-            totalTraffic.set(key, value);
-        }
-    });
   
-    // Update each station..
+    const arrivals = d3.rollup(
+      filterByMinute(arrivalsByMinute, timeFilter), // Efficient retrieval
+      (v) => v.length,
+      (d) => d.end_station_id
+    );
+  
+    // Update station data with filtered counts
     return stations.map((station) => {
         let id = station.short_name;
         station.departures = departures.get(id) ?? 0;
         station.arrivals = arrivals.get(id) ?? 0;
-        station.totalTraffic = totalTraffic.get(id) ?? 0;
+        station.totalTraffic = station.departures + station.arrivals;
         return station;
     });
 }
@@ -56,22 +53,23 @@ function minutesSinceMidnight(date) {
     return date.getHours() * 60 + date.getMinutes();
 }
 
-function filterTripsbyTime(trips, timeFilter) {
-    return timeFilter === -1 
-      ? trips // If no filter is applied (-1), return all trips
-      : trips.filter((trip) => {
-          // Convert trip start and end times to minutes since midnight
-          const startedMinutes = minutesSinceMidnight(trip.started_at);
-          departuresByMinute[startedMinutes].push(trip);
-          const endedMinutes = minutesSinceMidnight(trip.ended_at);
-          arrivalsByMinute[endedMinutes].push(trip);
-          
-          // Include trips that started or ended within 60 minutes of the selected time
-        return (
-            Math.abs(startedMinutes - timeFilter) <= 60 ||
-            Math.abs(endedMinutes - timeFilter) <= 60
-        );
-    });
+function filterByMinute(tripsByMinute, minute) {
+    if (minute === -1) {
+      return tripsByMinute.flat(); // No filtering, return all trips
+    }
+  
+    // Normalize both min and max minutes to the valid range [0, 1439]
+    let minMinute = (minute - 60 + 1440) % 1440;
+    let maxMinute = (minute + 60) % 1440;
+  
+    // Handle time filtering across midnight
+    if (minMinute > maxMinute) {
+      let beforeMidnight = tripsByMinute.slice(minMinute);
+      let afterMidnight = tripsByMinute.slice(0, maxMinute);
+      return beforeMidnight.concat(afterMidnight).flat();
+    } else {
+      return tripsByMinute.slice(minMinute, maxMinute).flat();
+    }
 }
 
 // let jsonData;
@@ -82,7 +80,7 @@ const jsonData = await d3.json(jsonurl);
           
 console.log('Loaded JSON Data:', jsonData); // Log to verify structure
 
-const stations = computeStationTraffic(jsonData.data.stations, trips);
+const stations = computeStationTraffic(jsonData.data.stations);
 let stationFlow = d3.scaleQuantize().domain([0, 1]).range([0, 0.5, 1]);
 console.log('Stations Array:', stations);
 
@@ -184,12 +182,9 @@ map.on('load', () => {
         updateScatterPlot(timeFilter);
     }
 
-    function updateScatterPlot(timeFilter) {
-        // Get only the trips that match the selected time filter
-        const filteredTrips = filterTripsbyTime(trips, timeFilter);
-        
+    function updateScatterPlot(timeFilter) {      
         // Recompute station traffic based on the filtered trips
-        const filteredStations = computeStationTraffic(stations, filteredTrips);
+        const filteredStations = computeStationTraffic(stations, timeFilter);
         timeFilter === -1 ? radiusScale.range([0, 25]) : radiusScale.range([3, 50]);
         
         // Update the scatterplot by adjusting the radius of circles
